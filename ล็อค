@@ -1,0 +1,89 @@
+-- ====================================================
+-- Script: College of Blocks (Auto Farm แบบไม่กดปุ่มเก็บ)
+-- Executor: Delta Supported
+-- ====================================================
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "มหาลัยชาวล็อค | Auto Farm (No Press)",
+   LoadingTitle = "กำลังโหลดสคริปต์...",
+   LoadingSubtitle = "by Delta",
+   ConfigurationSaving = { Enabled = false },
+   KeySystem = false
+})
+
+local MainTab = Window:CreateTab("ฟาร์มเงินอัตโนมัติ", 4483362458)
+
+_G.AutoBringScrap = false
+_G.AutoSell = false
+
+-- 1. ลาก/ดึงซากรถและของเก่าเข้ามาใส่ตัวผู้เล่นโดยตรง
+MainTab:CreateToggle({
+   Name = "ดึงซากรถ/ของเก่าเข้าตัวออโต้ (Bring Scrap)",
+   CurrentValue = false,
+   Flag = "BringScrapNoPress",
+   Callback = function(Value)
+      _G.AutoBringScrap = Value
+      task.spawn(function()
+         while _G.AutoBringScrap do
+            task.wait(0.3)
+            pcall(function()
+               local player = game.Players.LocalPlayer
+               local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+               
+               if hrp then
+                  for _, v in pairs(game:GetService("Workspace"):GetDescendants()) do
+                     -- ค้นหาชิ้นส่วนซากรถ หรือของเก่าในฉาก
+                     if v:IsA("BasePart") and not v:IsDescendantOf(player.Character) then
+                        local nameLower = string.lower(v.Name)
+                        if nameLower:find("car") or nameLower:find("scrap") or nameLower:find("รถ") or nameLower:find("ซาก") then
+                           v.CFrame = hrp.CFrame
+                           v.CanCollide = false
+                        end
+                     end
+                  end
+               end
+            end)
+         end
+      end)
+   end,
+})
+
+-- 2. วาร์ปไปจุดส่งของ/รับซื้อของเก่าอัตโนมัติ
+MainTab:CreateToggle({
+   Name = "วาร์ปไปจุดส่งของ/ขายเงินออโต้",
+   CurrentValue = false,
+   Flag = "AutoSellNoPress",
+   Callback = function(Value)
+      _G.AutoSell = Value
+      task.spawn(function()
+         while _G.AutoSell do
+            task.wait(1)
+            pcall(function()
+               local hrp = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+               
+               -- ค้นหาจุดขาย/จุดส่งของเก่าในร้าน
+               for _, zone in pairs(game:GetService("Workspace"):GetDescendants()) do
+                  if zone:IsA("BasePart") then
+                     local zName = string.lower(zone.Name)
+                     if zName:find("sell") or zName:find("รับซื้อ") or zName:find("จุดขาย") then
+                        if hrp then
+                           hrp.CFrame = zone.CFrame + Vector3.new(0, 3, 0)
+                        end
+                        break
+                     end
+                  end
+               end
+            end)
+         end
+      end)
+   end,
+})
+
+Rayfield:Notify({
+   Title = "สคริปต์พร้อมใช้งาน!",
+   Content = "เปิดสวิตช์ดึงของเข้าตัวได้เลยครับ โดยไม่ต้องกดปุ่มเก็บ",
+   Duration = 5,
+   Image = 4483362458,
+})
