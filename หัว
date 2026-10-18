@@ -1,0 +1,185 @@
+-- โหลด Rayfield UI Library
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- สร้างหน้าต่างหลักของ UI
+local Window = Rayfield:CreateWindow({
+   Name = "มหาลัยชาวล็อก | Delta Script (Option 1 & 5)",
+   LoadingTitle = "กำลังโหลดสคริปต์...",
+   LoadingSubtitle = "by Gemini",
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = nil,
+      FileName = "MahalaiChaoLockConfig"
+   },
+   Discord = { Enabled = false },
+   KeySystem = false
+})
+
+-------------------------------------------------
+-- 🎯 แบบที่ 1: ระบบล็อคตัวผู้เล่น (Target Lock)
+-------------------------------------------------
+local LockTab = Window:CreateTab("🎯 ล็อคตัวผู้เล่น (Option 1)", 4483362458)
+
+local TargetLockEnabled = false
+local LockTarget = nil
+local MaxDistance = 500
+
+-- ฟังก์ชันหาผู้เล่นใกล้ที่สุด
+local function GetClosestPlayer()
+    local closestPlayer = nil
+    local shortestDistance = MaxDistance
+    local localPlayer = game.Players.LocalPlayer
+    local localChar = localPlayer.Character
+    
+    if localChar and localChar:FindFirstChild("HumanoidRootPart") then
+        local myPos = localChar.HumanoidRootPart.Position
+        
+        for _, player in pairs(game.Players:GetPlayers()) do
+            if player ~= localPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChildOfClass("Humanoid") then
+                if player.Character.Humanoid.Health > 0 then
+                    local targetPos = player.Character.HumanoidRootPart.Position
+                    local distance = (targetPos - myPos).Magnitude
+                    
+                    if distance < shortestDistance then
+                        shortestDistance = distance
+                        closestPlayer = player
+                    end
+                end
+            end
+        end
+    end
+    return closestPlayer
+end
+
+-- ลูปรันระบบล็อคมุมกล้องหันตามตัวผู้เล่น
+game:GetService("RunService").RenderStepped:Connect(function()
+    if TargetLockEnabled then
+        if not LockTarget or not LockTarget.Character or LockTarget.Character.Humanoid.Health <= 0 then
+            LockTarget = GetClosestPlayer()
+        end
+        
+        if LockTarget and LockTarget.Character and LockTarget.Character:FindFirstChild("HumanoidRootPart") then
+            local camera = workspace.CurrentCamera
+            camera.CFrame = CFrame.new(camera.CFrame.Position, LockTarget.Character.HumanoidRootPart.Position)
+        end
+    end
+end)
+
+-- ปุ่มเปิด/ปิด แบบที่ 1
+LockTab:CreateToggle({
+   Name = "🎯 เปิด/ปิด ล็อคเป้าตัวผู้เล่น (Target Lock)",
+   CurrentValue = false,
+   Flag = "TargetLockToggle",
+   Callback = function(Value)
+      TargetLockEnabled = Value
+      if not Value then LockTarget = nil end
+   end,
+})
+
+-- ปรับระยะล็อค
+LockTab:CreateSlider({
+   Name = "ระยะล็อคสูงสุด (Lock Distance)",
+   Range = {50, 2000},
+   Increment = 50,
+   Suffix = " Studs",
+   CurrentValue = 500,
+   Flag = "DistanceSlider",
+   Callback = function(Value)
+      MaxDistance = Value
+   end,
+})
+
+-------------------------------------------------
+-- ⚡ แบบที่ 5: ระบบติดตัวผู้เล่น & โจมตี (Teleport & Auto Hit)
+-------------------------------------------------
+local ExtraTab = Window:CreateTab("⚡ วาร์ปหา/โจมตี (Option 5)", 4483362458)
+
+local TeleportToTargetEnabled = false
+local AutoHitEnabled = false
+
+-- ปุ่มวาร์ปติดตัวผู้เล่นที่ถูกล็อค
+ExtraTab:CreateToggle({
+   Name = "🚀 วาร์ปไปประกบหลังเป้าหมาย (TP to Target)",
+   CurrentValue = false,
+   Flag = "TPTargetToggle",
+   Callback = function(Value)
+      TeleportToTargetEnabled = Value
+   end,
+})
+
+-- ปุ่มโจมตีอัตโนมัติ (Auto Click / Hit)
+ExtraTab:CreateToggle({
+   Name = "🥊 โจมตีอัตโนมัติ (Auto Hit)",
+   CurrentValue = false,
+   Flag = "AutoHitToggle",
+   Callback = function(Value)
+      AutoHitEnabled = Value
+   end,
+})
+
+-- ลูปการทำงานของ Option 5 (Teleport & Hit)
+task.spawn(function()
+    while task.wait(0.1) do
+        if LockTarget and LockTarget.Character and LockTarget.Character:FindFirstChild("HumanoidRootPart") then
+            local myChar = game.Players.LocalPlayer.Character
+            
+            -- วาร์ปไปข้างหลังเป้าหมาย 3 ช่อง
+            if TeleportToTargetEnabled and myChar and myChar:FindFirstChild("HumanoidRootPart") then
+                local targetHRP = LockTarget.Character.HumanoidRootPart
+                myChar.HumanoidRootPart.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
+            end
+            
+            -- สั่งจำลองการคลิกโจมตี
+            if AutoHitEnabled then
+                local virtualUser = game:GetService("VirtualUser")
+                virtualUser:CaptureController()
+                virtualUser:Button1Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+            end
+        end
+    end
+end)
+
+-------------------------------------------------
+-- 📱 ปุ่มลอยบนหน้าจอมือถือ (Mobile Floating Button)
+-------------------------------------------------
+local ScreenGui = Instance.new("ScreenGui")
+local MobileBtn = Instance.new("TextButton")
+local UICorner = Instance.new("UICorner")
+
+ScreenGui.Name = "DeltaOption1And5Gui"
+ScreenGui.Parent = game.CoreGui
+ScreenGui.ResetOnSpawn = false
+
+MobileBtn.Name = "LockButton"
+MobileBtn.Parent = ScreenGui
+MobileBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+MobileBtn.Position = UDim2.new(0.85, 0, 0.4, 0)
+MobileBtn.Size = UDim2.new(0, 65, 0, 65)
+MobileBtn.Font = Enum.Font.SourceSansBold
+MobileBtn.Text = "LOCK: OFF"
+MobileBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+MobileBtn.TextSize = 11.000
+MobileBtn.Active = true
+MobileBtn.Draggable = true
+
+UICorner.CornerRadius = UDim.new(0, 35)
+UICorner.Parent = MobileBtn
+
+MobileBtn.MouseButton1Click:Connect(function()
+   TargetLockEnabled = not TargetLockEnabled
+   if TargetLockEnabled then
+      MobileBtn.Text = "LOCK: ON"
+      MobileBtn.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
+   else
+      MobileBtn.Text = "LOCK: OFF"
+      MobileBtn.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+      LockTarget = nil
+   end
+end)
+
+Rayfield:Notify({
+   Title = "สคริปต์พร้อมใช้งาน!",
+   Content = "โหลดระบบ แบบที่ 1 (Target Lock) และ แบบที่ 5 (TP & Auto Hit) เรียบร้อยแล้ว",
+   Duration = 5,
+   Image = 4483362458,
+})
