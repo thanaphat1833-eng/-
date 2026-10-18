@@ -1,0 +1,95 @@
+-- ===================================================
+-- Delta Script: Aimbot + Auto Shoot + Target Switch
+-- Map: [🎃Battlepass] สนามซุ่มยิง
+-- ===================================================
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+-- การตั้งค่า (Configuration)
+local Settings = {
+    AimbotEnabled = true,     -- เปิด/ปิด ระบบช่วยเล็ง
+    AutoShoot = true,         -- เปิด/ปิด ยิงอัตโนมัติ
+    FOV = 200,                -- รัศมีวงกลมช่วยเล็ง (พิกเซล)
+    TargetPart = "Head",      -- ตำแหน่งที่เล็ง ("Head" = หัว, "HumanoidRootPart" = ลำตัว)
+    Smoothness = 0.2          -- ความนุ่มนวลในการล็อคเป้า (0.1 - 1.0)
+}
+
+-- สร้างวงกลม FOV แสดงขอบเขตการล็อค
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Color = Color3.fromRGB(255, 0, 0)
+FOVCircle.Thickness = 1.5
+FOVCircle.NumSides = 60
+FOVCircle.Radius = Settings.FOV
+FOVCircle.Filled = false
+FOVCircle.Visible = true
+
+-- ฟังก์ชันค้นหาเป้าหมายที่ใกล้เคียงที่สุด (รองรับทั้งผู้เล่นและบอท)
+local function GetClosestTarget()
+    local closestTarget = nil
+    local shortestDistance = Settings.FOV
+
+    -- อัปเดตตำแหน่งวงกลม FOV ตามเมาส์/หน้าจอ
+    local mousePos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    FOVCircle.Position = mousePos
+
+    -- ค้นหาตัวละครทั้งหมดใน Workspace (รวมทั้ง Players และ NPCs/Bots)
+    for _, model in pairs(Workspace:GetChildren()) do
+        if model:IsA("Model") and model ~= LocalPlayer.Character then
+            local humanoid = model:FindFirstChildOfClass("Humanoid")
+            local targetPart = model:FindFirstChild(Settings.TargetPart)
+
+            -- ตรวจสอบว่าเป้าหมายยังมีชีวิตอยู่
+            if humanoid and humanoid.Health > 0 and targetPart then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                
+                if onScreen then
+                    local targetPos2D = Vector2.new(screenPos.X, screenPos.Y)
+                    local distance = (targetPos2D - mousePos).Magnitude
+
+                    -- เลือกเป้าหมายที่อยู่ในขอบเขต FOV และใกล้จุดศูนย์กลางที่สุด
+                    if distance < shortestDistance then
+                        shortestDistance = distance
+                        closestTarget = targetPart
+                    end
+                end
+            end
+        end
+    end
+
+    return closestTarget
+end
+
+-- ฟังก์ชันยิงอัตโนมัติ (Simulate Click)
+local function Shoot()
+    if mouse1click then
+        mouse1click()
+    elseif mouse1press then
+        mouse1press()
+        task.wait(0.05)
+        mouse1release()
+    end
+end
+
+-- ลูปการทำงานหลัก (RunService)
+RunService.RenderStepped:Connect(function()
+    if not Settings.AimbotEnabled then return end
+
+    local target = GetClosestTarget()
+
+    if target then
+        -- เล็งไปยังเป้าหมายอย่างนุ่มนวล
+        local targetCFrame = CFrame.new(Camera.CFrame.Position, target.Position)
+        Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, Settings.Smoothness)
+
+        -- ยิงอัตโนมัติเมื่อล็อคเป้าสำเร็จ
+        if Settings.AutoShoot then
+            Shoot()
+        end
+    end
+end)
+
+print("=== เปิดใช้งานระบบ Aimbot & Auto Shoot เรียบร้อย ===")
