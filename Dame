@@ -1,0 +1,395 @@
+-- roblox_dump.lua
+-- executor: synapse x / wave / xeno / seliware compatible
+-- dumps: remotes, players, characters, services, scripts, guis, bindables, values, sounds, animations
+
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+------------------------------------------------------------------------
+-- UTILS
+------------------------------------------------------------------------
+
+local seen = {}
+
+local function safeGet(fn, ...)
+    local ok, res = pcall(fn, ...)
+    if ok then return res end
+    return nil
+end
+
+local function safeRead(inst, prop)
+    local ok, val = pcall(function() return inst[prop] end)
+    if ok then return val end
+    return nil
+end
+
+local function toAddr(inst)
+    return tostring(inst):gsub("userdata: ", "")
+end
+
+local function getFullName(inst)
+    return safeGet(function() return inst:GetFullName() end) or "?"
+end
+
+------------------------------------------------------------------------
+-- INSTANCE DEEP DUMP
+------------------------------------------------------------------------
+
+local VALUE_CLASSES = {
+    StringValue=true, IntValue=true, NumberValue=true,
+    BoolValue=true, Vector3Value=true, CFrameValue=true,
+    Color3Value=true, ObjectValue=true,
+}
+
+local function dumpProperties(inst)
+    local props = {}
+    local class = safeRead(inst, "ClassName") or ""
+
+    -- common
+    props.Name       = safeRead(inst, "Name")
+    props.ClassName  = class
+    props.FullName   = getFullName(inst)
+    props.Address    = toAddr(inst)
+
+    -- value objects
+    if VALUE_CLASSES[class] then
+        local v = safeGet(function() return inst.Value end)
+        if v ~= nil then
+            props.Value = tostring(v)
+        end
+    end
+
+    -- BasePart
+    if safeGet(function() return inst:IsA("BasePart") end) then
+        local cf = safeRead(inst, "CFrame")
+        if cf then
+            props.Position = { X=cf.X, Y=cf.Y, Z=cf.Z }
+            props.LookVector = { X=cf.LookVector.X, Y=cf.LookVector.Y, Z=cf.LookVector.Z }
+        end
+        props.Size        = tostring(safeRead(inst, "Size"))
+        props.CanCollide  = safeRead(inst, "CanCollide")
+        props.Anchored    = safeRead(inst, "Anchored")
+        props.Transparency= safeRead(inst, "Transparency")
+        props.Material    = tostring(safeRead(inst, "Material"))
+    end
+
+    -- Humanoid
+    if class == "Humanoid" then
+        props.Health    = safeRead(inst, "Health")
+        props.MaxHealth = safeRead(inst, "MaxHealth")
+        props.WalkSpeed = safeRead(inst, "WalkSpeed")
+        props.JumpPower = safeRead(inst, "JumpPower")
+        props.HipHeight = safeRead(inst, "HipHeight")
+        props.RigType   = tostring(safeRead(inst, "RigType"))
+        props.DisplayName = safeRead(inst, "DisplayName")
+    end
+
+    -- Script / LocalScript / ModuleScript
+    if class == "Script" or class == "LocalScript" or class == "ModuleScript" then
+        props.Disabled = safeRead(inst, "Disabled")
+        -- source not readable client-side unless deobfuscated â note it
+        props.SourceNote = "source not accessible client-side"
+    end
+
+    -- Sound
+    if class == "Sound" then
+        props.SoundId   = safeRead(inst, "SoundId")
+        props.Volume    = safeRead(inst, "Volume")
+        props.Playing   = safeRead(inst, "IsPlaying")
+        props.Looped    = safeRead(inst, "Looping")
+        props.TimeLength= safeRead(inst, "TimeLength")
+    end
+
+    -- Animation
+    if class == "Animation" then
+        props.AnimationId = safeRead(inst, "AnimationId")
+    end
+
+    -- GUI
+    if safeGet(function() return inst:IsA("GuiObject") end) then
+        props.Visible   = safeRead(inst, "Visible")
+        props.Size      = tostring(safeRead(inst, "Size"))
+        props.Position  = tostring(safeRead(inst, "AbsolutePosition"))
+        props.ZIndex    = safeRead(inst, "ZIndex")
+    end
+
+    -- TextLabel / TextButton / TextBox
+    if class == "TextLabel" or class == "TextButton" or class == "TextBox" then
+        props.Text = safeRead(inst, "Text")
+    end
+
+    -- RemoteFunction / RemoteEvent / BindableEvent / BindableFunction
+    if class == "RemoteFunction" or class == "RemoteEvent"
+    or class == "UnreliableRemoteEvent"
+    or class == "BindableEvent" or class == "BindableFunction" then
+        props.Type = class
+    end
+
+    -- Attribute dump
+    local attrs = safeGet(function() return inst:GetAttributes() end)
+    if attrs and next(attrs) then
+        local attrDump = {}
+        for k, v in pairs(attrs) do
+            attrDump[k] = tostring(v)
+        end
+        props.Attributes = attrDump
+    end
+
+    -- Tags
+    local tags = safeGet(function() return inst:GetTags() end)
+    if tags and #tags > 0 then
+        props.Tags = tags
+    end
+
+    return props
+end
+
+local function dumpTree(inst, depth, maxDepth)
+    if not inst then return nil end
+    if depth > maxDepth then return { _truncated=true, Name=safeRead(inst,"Name"), ClassName=safeRead(inst,"ClassName") } end
+
+    -- dedup
+    local addr = toAddr(inst)
+    if seen[addr] then return { _ref=addr } end
+    seen[addr] = true
+
+    local node = dumpProperties(inst)
+    local children = safeGet(function() return inst:GetChildren() end) or {}
+
+    if #children > 0 then
+        node.children = {}
+        for _, child in ipairs(children) do
+            local childNode = dumpTree(child, depth + 1, maxDepth)
+            if childNode then
+                table.insert(node.children, childNode)
+            end
+        end
+    end
+
+    return node
+end
+
+------------------------------------------------------------------------
+-- REMOTE DUMP (flat, full scan, deduped)
+------------------------------------------------------------------------
+
+local REMOTE_SCAN_ROOTS = {
+    "ReplicatedStorage",
+    "ReplicatedFirst",
+    "Workspace",
+}
+
+local function dumpRemotes()
+    local remotes = {}
+    local remoteSeen = {}
+
+    local function scanFolder(folder)
+        if not folder then return end
+        local descendants = safeGet(function() return folder:GetDescendants() end) or {}
+        for _, child in ipairs(descendants) do
+            local class = safeRead(child, "ClassName") or ""
+            if class == "RemoteFunction" or class == "RemoteEvent"
+            or class == "UnreliableRemoteEvent"
+            or class == "BindableEvent" or class == "BindableFunction" then
+                local addr = toAddr(child)
+                if not remoteSeen[addr] then
+                    remoteSeen[addr] = true
+                    local attrs = safeGet(function() return child:GetAttributes() end)
+                    local attrDump = {}
+                    if attrs then
+                        for k, v in pairs(attrs) do attrDump[k] = tostring(v) end
+                    end
+                    table.insert(remotes, {
+                        className = class,
+                        name      = safeRead(child, "Name"),
+                        fullName  = getFullName(child),
+                        address   = addr,
+                        parent    = safeRead(child.Parent, "Name"),
+                        attributes= next(attrDump) and attrDump or nil,
+                    })
+                end
+            end
+        end
+    end
+
+    for _, svcName in ipairs(REMOTE_SCAN_ROOTS) do
+        local svc = safeGet(function() return game:GetService(svcName) end)
+        scanFolder(svc)
+    end
+
+    return remotes
+end
+
+------------------------------------------------------------------------
+-- PLAYER DUMP
+------------------------------------------------------------------------
+
+local function dumpPlayer(player)
+    local data = {
+        name            = safeRead(player, "Name"),
+        displayName     = safeRead(player, "DisplayName"),
+        userId          = safeRead(player, "UserId"),
+        accountAge      = safeRead(player, "AccountAge"),
+        teamColor       = tostring(safeRead(player, "TeamColor")),
+        team            = safeGet(function() return player.Team and player.Team.Name end),
+        gameSessionId   = tostring(safeRead(player, "GameSessionID")),
+        followUserId    = safeRead(player, "FollowUserId"),
+        membershipType  = tostring(safeRead(player, "MembershipType")),
+        policyInfo      = nil,
+        leaderstats     = nil,
+        character       = nil,
+        backpack        = nil,
+        playerGui       = nil,
+        playerScripts   = nil,
+    }
+
+    -- leaderstats
+    local ls = safeGet(function() return player:FindFirstChild("leaderstats") end)
+    if ls then
+        data.leaderstats = {}
+        for _, stat in ipairs(safeGet(function() return ls:GetChildren() end) or {}) do
+            local v = safeGet(function() return stat.Value end)
+            data.leaderstats[safeRead(stat,"Name") or "?"] = tostring(v)
+        end
+    end
+
+    -- character (deep, up to depth 8)
+    if player.Character then
+        seen = {} -- reset seen per character to allow full traversal
+        data.character = dumpTree(player.Character, 0, 8)
+    end
+
+    -- backpack (tools)
+    local bp = safeGet(function() return player:FindFirstChildOfClass("Backpack") end)
+    if bp then
+        data.backpack = {}
+        for _, tool in ipairs(safeGet(function() return bp:GetChildren() end) or {}) do
+            table.insert(data.backpack, {
+                name = safeRead(tool, "Name"),
+                className = safeRead(tool, "ClassName"),
+                toolTip = safeRead(tool, "ToolTip"),
+                requiresHandle = safeRead(tool, "RequiresHandle"),
+            })
+        end
+    end
+
+    -- playerGui (screen GUIs, top level)
+    local pg = safeGet(function() return player:FindFirstChildOfClass("PlayerGui") end)
+    if pg then
+        data.playerGui = {}
+        for _, gui in ipairs(safeGet(function() return pg:GetChildren() end) or {}) do
+            table.insert(data.playerGui, {
+                name = safeRead(gui, "Name"),
+                className = safeRead(gui, "ClassName"),
+                enabled = safeRead(gui, "Enabled"),
+                children = #(safeGet(function() return gui:GetChildren() end) or {}),
+            })
+        end
+    end
+
+    return data
+end
+
+local function dumpPlayers()
+    local list = {}
+    for _, player in ipairs(safeGet(function() return Players:GetPlayers() end) or {}) do
+        table.insert(list, dumpPlayer(player))
+    end
+    return list
+end
+
+------------------------------------------------------------------------
+-- SERVICE SNAPSHOT
+------------------------------------------------------------------------
+
+local SERVICES_TO_SNAP = {
+    "ReplicatedStorage", "ReplicatedFirst",
+    "Workspace", "Lighting",
+    "SoundService", "StarterGui", "StarterPack", "StarterPlayer",
+    "Teams", "Chat",
+}
+
+local function dumpServices()
+    local snap = {}
+    for _, name in ipairs(SERVICES_TO_SNAP) do
+        seen = {}
+        local svc = safeGet(function() return game:GetService(name) end)
+        if svc then
+            snap[name] = dumpTree(svc, 0, 6)
+        end
+    end
+    return snap
+end
+
+------------------------------------------------------------------------
+-- GAME META
+------------------------------------------------------------------------
+
+local function dumpMeta()
+    return {
+        gameId          = safeRead(game, "GameId"),
+        placeId         = safeRead(game, "PlaceId"),
+        placeVersion    = safeRead(game, "PlaceVersion"),
+        jobId           = safeRead(game, "JobId"),
+        creatorId       = safeRead(game, "CreatorId"),
+        creatorType     = tostring(safeRead(game, "CreatorType")),
+        serverTimestamp = safeGet(function() return game:GetService("Workspace"):GetServerTimeNow() end),
+        clientTime      = tick(),
+        clientTimeOs    = os.time(),
+        isStudio        = RunService:IsStudio(),
+        isClient        = RunService:IsClient(),
+    }
+end
+
+------------------------------------------------------------------------
+-- MAIN
+------------------------------------------------------------------------
+
+local function main()
+    print("[6larping7] starting full dump...")
+
+    local dump = {
+        meta     = dumpMeta(),
+        remotes  = dumpRemotes(),
+        players  = dumpPlayers(),
+        services = dumpServices(),
+    }
+
+    print("[6larping7] encoding json...")
+    local ok, json = pcall(function()
+        return HttpService:JSONEncode(dump)
+    end)
+
+    if not ok then
+        warn("[!] JSONEncode failed: " .. tostring(json))
+        -- fallback: dump each section separately
+        for section, data in pairs(dump) do
+            local okS, jsonS = pcall(function() return HttpService:JSONEncode(data) end)
+            if okS then
+                local wOk, wErr = pcall(writefile, "roblox_dump_" .. section .. ".json", jsonS)
+                if wOk then
+                    print("[+] fallback saved: roblox_dump_" .. section .. ".json")
+                else
+                    warn("[!] writefile failed for " .. section .. ": " .. tostring(wErr))
+                end
+            end
+        end
+        return
+    end
+
+    local wOk, wErr = pcall(writefile, "roblox_dump.json", json)
+    if not wOk then
+        warn("[!] writefile failed: " .. tostring(wErr))
+        return
+    end
+
+    print("[+] dump saved â roblox_dump.json")
+    print("[+] remotes   : " .. #dump.remotes)
+    print("[+] players   : " .. #dump.players)
+    print("[+] gameId    : " .. tostring(dump.meta.gameId))
+    print("[+] placeId   : " .. tostring(dump.meta.placeId))
+    print("[+] serverTime: " .. tostring(dump.meta.serverTimestamp))
+end
+
+main()
