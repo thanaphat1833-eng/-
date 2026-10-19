@@ -1,0 +1,164 @@
+-- Delta Executor Auto Get Box & TP Green Zone
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- ลบ GUI เก่าหากรันซ้ำ
+if CoreGui:FindFirstChild("DeltaGreenBoxGUI") then
+    CoreGui.DeltaGreenBoxGUI:Destroy()
+end
+
+-- สร้าง ScreenGui
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "DeltaGreenBoxGUI"
+ScreenGui.Parent = CoreGui
+ScreenGui.ResetOnSpawn = false
+
+-- 1. ปุ่มทรงกลมสำหรับ ย่อ/ขยาย หน้าต่างเมนู (ลากย้ายได้)
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ToggleBtn"
+ToggleBtn.Size = UDim2.new(0, 45, 0, 45)
+ToggleBtn.Position = UDim2.new(0, 15, 0.35, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+ToggleBtn.Text = "📦"
+ToggleBtn.TextSize = 20
+ToggleBtn.Active = true
+ToggleBtn.Draggable = true
+ToggleBtn.Parent = ScreenGui
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(1, 0)
+ToggleCorner.Parent = ToggleBtn
+
+-- 2. หน้าต่างเมนูหลัก
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 210, 0, 150)
+MainFrame.Position = UDim2.new(0, 70, 0.35, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 8)
+MainCorner.Parent = MainFrame
+
+-- กดปุ่มกลมเพื่อ ซ่อน / แสดง เมนู
+ToggleBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- หัวข้อ
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 32)
+Title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+Title.Text = "📦 Box Farm & TP Green"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 14
+Title.Font = Enum.Font.SourceSansBold
+Title.Parent = MainFrame
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 8)
+TitleCorner.Parent = Title
+
+-- ปุ่ม เปิด/ปิด ระบบ Auto Farm
+local AutoBtn = Instance.new("TextButton")
+AutoBtn.Size = UDim2.new(0.85, 0, 0, 38)
+AutoBtn.Position = UDim2.new(0.075, 0, 0.32, 0)
+AutoBtn.BackgroundColor3 = Color3.fromRGB(192, 57, 43)
+AutoBtn.Text = "🔴 AUTO FARM : OFF"
+AutoBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AutoBtn.TextSize = 14
+AutoBtn.Font = Enum.Font.SourceSansBold
+AutoBtn.Parent = MainFrame
+
+local AutoCorner = Instance.new("UICorner")
+AutoCorner.CornerRadius = UDim.new(0, 6)
+AutoCorner.Parent = AutoBtn
+
+-- ปุ่มปิดเมนู
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0.85, 0, 0, 28)
+CloseBtn.Position = UDim2.new(0.075, 0, 0.70, 0)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(127, 140, 141)
+CloseBtn.Text = "❌ ปิดเมนู"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.TextSize = 13
+CloseBtn.Font = Enum.Font.SourceSans
+CloseBtn.Parent = MainFrame
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.Parent = CloseBtn
+
+_G.AutoBoxTP = false
+
+-- สลับสถานะเปิด/ปิด
+AutoBtn.MouseButton1Click:Connect(function()
+    _G.AutoBoxTP = not _G.AutoBoxTP
+    if _G.AutoBoxTP then
+        AutoBtn.Text = "🟢 AUTO FARM : ON"
+        AutoBtn.BackgroundColor3 = Color3.fromRGB(39, 174, 96)
+    else
+        AutoBtn.Text = "🔴 AUTO FARM : OFF"
+        AutoBtn.BackgroundColor3 = Color3.fromRGB(192, 57, 43)
+    end
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    _G.AutoBoxTP = false
+    ScreenGui:Destroy()
+end)
+
+-- ฟังก์ชันค้นหาจุดสีเขียว
+local function getGreenZone()
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            if obj.Color == Color3.fromRGB(0, 255, 0) 
+               or obj.Color == Color3.fromRGB(85, 255, 0) 
+               or (obj.BrickColor and obj.BrickColor.Name:lower():find("green")) then
+                return obj
+            end
+        end
+    end
+    return nil
+end
+
+-- ลูปการทำงาน (รับกล่อง -> วาร์ปไปจุดเขียว)
+task.spawn(function()
+    while true do
+        task.wait(0.3)
+        if _G.AutoBoxTP then
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            
+            if hrp then
+                -- 1. ไปกดรับกล่องที่ ProximityPrompt
+                local foundBox = false
+                for _, prompt in pairs(workspace:GetDescendants()) do
+                    if prompt:IsA("ProximityPrompt") then
+                        -- วาร์ปไปหากล่อง
+                        hrp.CFrame = prompt.Parent:GetPivot() * CFrame.new(0, 0, -2)
+                        task.wait(0.2)
+                        fireproximityprompt(prompt)
+                        task.wait(0.3)
+                        foundBox = true
+                        break
+                    end
+                end
+                
+                -- 2. วาร์ปไปจุดสีเขียวส่งของ
+                if foundBox then
+                    local greenZone = getGreenZone()
+                    if greenZone then
+                        hrp.CFrame = greenZone.CFrame * CFrame.new(0, 3, 0)
+                        task.wait(1) -- รอเวลาให้ระบบคิดเงิน/ส่งกล่อง
+                    end
+                end
+            end
+        end
+    end
+end)
