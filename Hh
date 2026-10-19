@@ -1,0 +1,158 @@
+-- AutoFarmMenu (LocalScript ใน StarterPlayerScripts)
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local farmEvent = ReplicatedStorage:WaitForChild("AutoFarmEvent")
+local updateEvent = ReplicatedStorage:WaitForChild("AutoFarmUpdate")
+
+-- สร้าง GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AutoFarmGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+-- ปุ่มเปิด/ปิดเมนู
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0, 100, 0, 40)
+toggleBtn.Position = UDim2.new(0, 10, 0, 10)
+toggleBtn.Text = "Auto Farm"
+toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+toggleBtn.TextColor3 = Color3.new(1, 1, 1)
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.TextSize = 16
+toggleBtn.Parent = screenGui
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
+
+-- หน้าต่างเมนู
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 260, 0, 220)
+frame.Position = UDim2.new(0.5, -130, 0.5, -110)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.Visible = false
+frame.Parent = screenGui
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+
+-- หัวข้อ
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 40)
+title.BackgroundTransparency = 1
+title.Text = "🌟 Auto Farm Menu"
+title.TextColor3 = Color3.fromRGB(255, 215, 0)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.Parent = frame
+
+-- ปุ่มเปิด/ปิดฟาร์ม
+local farmToggle = Instance.new("TextButton")
+farmToggle.Size = UDim2.new(0.9, 0, 0, 45)
+farmToggle.Position = UDim2.new(0.05, 0, 0, 50)
+farmToggle.Text = "▶ เริ่มฟาร์ม"
+farmToggle.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+farmToggle.TextColor3 = Color3.new(1, 1, 1)
+farmToggle.Font = Enum.Font.GothamBold
+farmToggle.TextSize = 16
+farmToggle.Parent = frame
+Instance.new("UICorner", farmToggle).CornerRadius = UDim.new(0, 8)
+
+-- ป้ายสถานะ
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(0.9, 0, 0, 30)
+statusLabel.Position = UDim2.new(0.05, 0, 0, 105)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Text = "สถานะ: ปิด"
+statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.TextSize = 14
+statusLabel.Parent = frame
+
+-- ช่องตั้งค่า Rate
+local rateBox = Instance.new("TextBox")
+rateBox.Size = UDim2.new(0.55, 0, 0, 40)
+rateBox.Position = UDim2.new(0.05, 0, 0, 140)
+rateBox.Text = "10"
+rateBox.PlaceholderText = "เงิน/วินาที"
+rateBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+rateBox.TextColor3 = Color3.new(1, 1, 1)
+rateBox.Font = Enum.Font.Gotham
+rateBox.TextSize = 14
+rateBox.Parent = frame
+Instance.new("UICorner", rateBox).CornerRadius = UDim.new(0, 8)
+
+-- ปุ่มบันทึก Rate
+local saveBtn = Instance.new("TextButton")
+saveBtn.Size = UDim2.new(0.3, 0, 0, 40)
+saveBtn.Position = UDim2.new(0.65, 0, 0, 140)
+saveBtn.Text = "บันทึก"
+saveBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 200)
+saveBtn.TextColor3 = Color3.new(1, 1, 1)
+saveBtn.Font = Enum.Font.GothamBold
+saveBtn.TextSize = 14
+saveBtn.Parent = frame
+Instance.new("UICorner", saveBtn).CornerRadius = UDim.new(0, 8)
+
+-- ปุ่มปิดเมนู
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0.9, 0, 0, 35)
+closeBtn.Position = UDim2.new(0.05, 0, 0, 185)
+closeBtn.Text = "✖ ปิด"
+closeBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+closeBtn.TextColor3 = Color3.new(1, 1, 1)
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 14
+closeBtn.Parent = frame
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 8)
+
+-- สถานะฝั่ง client
+local isFarming = false
+
+-- เปิด/ปิดเมนู
+toggleBtn.MouseButton1Click:Connect(function()
+    frame.Visible = not frame.Visible
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    frame.Visible = false
+end)
+
+-- ปุ่มเริ่ม/หยุดฟาร์ม
+farmToggle.MouseButton1Click:Connect(function()
+    farmEvent:FireServer("toggle")
+end)
+
+-- บันทึก rate
+saveBtn.MouseButton1Click:Connect(function()
+    local num = tonumber(rateBox.Text)
+    if num then
+        farmEvent:FireServer("setRate", num)
+    else
+        statusLabel.Text = "10"
+    end
+end)
+
+-- รับอัปเดตจาก server
+updateEvent.OnClientEvent:Connect(function(enabled, rate)
+    isFarming = enabled
+    if enabled then
+        farmToggle.Text = "⏸ หยุดฟาร์ม"
+        farmToggle.BackgroundColor3 = Color3.fromRGB(200, 150, 0)
+        statusLabel.Text = "สถานะ: กำลังฟาร์ม (" .. rate .. " เงิน/วิ)"
+        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+    else
+        farmToggle.Text = "▶ เริ่มฟาร์ม"
+        farmToggle.BackgroundColor3 = Color3.fromRGB(50, 150, 50)
+        statusLabel.Text = "สถานะ: ปิด"
+        statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    end
+end)
+
+-- ปุ่มลัด: กด RightShift เปิด/ปิดเมนู
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        frame.Visible = not frame.Visible
+    end
+end)
