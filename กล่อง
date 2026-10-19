@@ -1,0 +1,48 @@
+-- Delta Executor Auto Delivery Script
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
+
+_G.AutoFarm = true -- เปลี่ยนเป็น false หากต้องการหยุดฟาร์ม
+
+local function getCharacter()
+    return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+end
+
+local function firePrompt(prompt)
+    if prompt and prompt:IsA("ProximityPrompt") then
+        fireproximityprompt(prompt)
+    end
+end
+
+task.spawn(function()
+    while _G.AutoFarm do
+        task.wait(0.5)
+        local char = getCharacter()
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        
+        if hrp then
+            -- 1. ค้นหา ProximityPrompt รับกล่อง
+            for _, prompt in pairs(workspace:GetDescendants()) do
+                if prompt:IsA("ProximityPrompt") and (prompt.ObjectText == "Deliveryman" or prompt.ActionText == "Get Job!") then
+                    -- วาร์ปไปหากล่องแล้วกดรับ
+                    hrp.CFrame = prompt.Parent:GetPivot() * CFrame.new(0, 0, -3)
+                    task.wait(0.3)
+                    firePrompt(prompt)
+                    task.wait(0.5)
+                    break
+                end
+            end
+            
+            -- 2. ค้นหาจุดวงกลมสีเขียวสำหรับส่งของ
+            for _, obj in pairs(workspace:GetDescendants()) do
+                if obj:IsA("BasePart") and obj.Color == Color3.fromRGB(0, 255, 0) or obj.Name:lower():find("sell") or obj.Name:lower():find("drop") then
+                    -- วาร์ปไปส่งของที่จุดเขียว
+                    hrp.CFrame = obj.CFrame * CFrame.new(0, 3, 0)
+                    task.wait(1)
+                    break
+                end
+            end
+        end
+    end
+end)
