@@ -1,0 +1,187 @@
+-- Delta Executor GUI with Minimize / Toggle Button
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+-- ลบ GUI เก่าถ้ามีอยู่
+if CoreGui:FindFirstChild("DeltaGreenZoneGUI") then
+    CoreGui.DeltaGreenZoneGUI:Destroy()
+end
+
+-- สร้าง ScreenGui หลัก
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "DeltaGreenZoneGUI"
+ScreenGui.Parent = CoreGui
+ScreenGui.ResetOnSpawn = false
+
+-- 1. ปุ่มเปิด/ปิดหน้าต่างเมนู (Floating Toggle Button)
+local ToggleUIBtn = Instance.new("TextButton")
+ToggleUIBtn.Name = "ToggleUIBtn"
+ToggleUIBtn.Size = UDim2.new(0, 50, 0, 50)
+ToggleUIBtn.Position = UDim2.new(0, 20, 0.3, 0)
+ToggleUIBtn.BackgroundColor3 = Color3.fromRGB(41, 128, 185)
+ToggleUIBtn.Text = "📦"
+ToggleUIBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleUIBtn.TextSize = 22
+ToggleUIBtn.Font = Enum.Font.SourceSansBold
+ToggleUIBtn.Active = true
+ToggleUIBtn.Draggable = true
+ToggleUIBtn.Parent = ScreenGui
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(1, 0) -- ทำเป็นปุ่มวงกลม
+ToggleCorner.Parent = ToggleUIBtn
+
+-- 2. สร้าง Frame หน้าต่างหลัก
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 220, 0, 190)
+MainFrame.Position = UDim2.new(0, 80, 0.3, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Visible = true -- เริ่มต้นให้แสดงหน้าต่างเมนู
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 10)
+MainCorner.Parent = MainFrame
+
+-- ฟังก์ชันกดปุ่มกลมเพื่อ ซ่อน / แสดง เมนู
+ToggleUIBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- หัวข้อ Menu
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 35)
+Title.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+Title.Text = "📦 Farm & TP Menu"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 16
+Title.Font = Enum.Font.SourceSansBold
+Title.Parent = MainFrame
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 10)
+TitleCorner.Parent = Title
+
+-- ฟังก์ชันค้นหาจุดสีเขียวส่งของ
+local function getGreenZoneCFrame()
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            if obj.Color == Color3.fromRGB(0, 255, 0) 
+               or obj.Color == Color3.fromRGB(85, 255, 0)
+               or (obj.BrickColor and obj.BrickColor.Name:lower():find("green"))
+               or obj.Name:lower():find("sell") 
+               or obj.Name:lower():find("drop") then
+                return obj.CFrame
+            end
+        end
+    end
+    return nil
+end
+
+-- ฟังก์ชันวาร์ป
+local function tpToGreenZone()
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        local greenCFrame = getGreenZoneCFrame()
+        if greenCFrame then
+            char.HumanoidRootPart.CFrame = greenCFrame * CFrame.new(0, 3, 0)
+        end
+    end
+end
+
+-- ปุ่มวาร์ปไปจุดสีเขียวทันที
+local TPBtn = Instance.new("TextButton")
+TPBtn.Size = UDim2.new(0.85, 0, 0, 35)
+TPBtn.Position = UDim2.new(0.075, 0, 0.25, 0)
+TPBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+TPBtn.Text = "📍 วาร์ปไปจุดสีเขียว"
+TPBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+TPBtn.TextSize = 15
+TPBtn.Font = Enum.Font.SourceSansBold
+TPBtn.Parent = MainFrame
+
+local TPCorner = Instance.new("UICorner")
+TPCorner.CornerRadius = UDim.new(0, 6)
+TPCorner.Parent = TPBtn
+
+TPBtn.MouseButton1Click:Connect(function()
+    tpToGreenZone()
+end)
+
+-- ปุ่มเปิด/ปิด ออโต้รับกล่องและวาร์ปส่ง
+local AutoBtn = Instance.new("TextButton")
+AutoBtn.Size = UDim2.new(0.85, 0, 0, 35)
+AutoBtn.Position = UDim2.new(0.075, 0, 0.50, 0)
+AutoBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+AutoBtn.Text = "🤖 Auto Farm: OFF"
+AutoBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AutoBtn.TextSize = 15
+AutoBtn.Font = Enum.Font.SourceSansBold
+AutoBtn.Parent = MainFrame
+
+local AutoCorner = Instance.new("UICorner")
+AutoCorner.CornerRadius = UDim.new(0, 6)
+AutoCorner.Parent = AutoBtn
+
+_G.AutoBoxFarm = false
+
+AutoBtn.MouseButton1Click:Connect(function()
+    _G.AutoBoxFarm = not _G.AutoBoxFarm
+    if _G.AutoBoxFarm then
+        AutoBtn.Text = "🤖 Auto Farm: ON"
+        AutoBtn.BackgroundColor3 = Color3.fromRGB(39, 174, 96)
+    else
+        AutoBtn.Text = "🤖 Auto Farm: OFF"
+        AutoBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+    end
+end)
+
+-- Loop การทำงานของ Auto Farm
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if _G.AutoBoxFarm then
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                -- กดรับกล่อง
+                for _, prompt in pairs(workspace:GetDescendants()) do
+                    if prompt:IsA("ProximityPrompt") then
+                        char.HumanoidRootPart.CFrame = prompt.Parent:GetPivot() * CFrame.new(0, 0, -3)
+                        task.wait(0.2)
+                        fireproximityprompt(prompt)
+                        task.wait(0.4)
+                        break
+                    end
+                end
+                
+                -- วาร์ปไปส่งที่จุดสีเขียว
+                tpToGreenZone()
+            end
+        end
+    end
+end)
+
+-- ปุ่มปิดและลบเมนูทิ้งถาวร
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0.85, 0, 0, 30)
+CloseBtn.Position = UDim2.new(0.075, 0, 0.75, 0)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(127, 140, 141)
+CloseBtn.Text = "❌ ปิดเมนูทิ้ง"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.TextSize = 14
+CloseBtn.Font = Enum.Font.SourceSans
+CloseBtn.Parent = MainFrame
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.Parent = CloseBtn
+
+CloseBtn.MouseButton1Click:Connect(function()
+    _G.AutoBoxFarm = false
+    ScreenGui:Destroy()
+end)
